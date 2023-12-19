@@ -1,0 +1,1 @@
+## How to perfectly forward `*this` object inside a member function?

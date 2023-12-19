@@ -1,0 +1,10 @@
+---
+layout: post
+title:  "PLT and GOT"
+---
+
+Today, I will talk about Procedural Linkage Table (PLT) and
+Global Offset Table (GOT). PLT and GOT are essential building blocks
+that enables dynamic linking. Let's see how do they do that.
+
+
