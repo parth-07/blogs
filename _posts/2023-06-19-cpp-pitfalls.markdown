@@ -1,13 +1,17 @@
-# C++ Pitfalls
+---
+layout: post
+title: "C++ pitfalls"
+---
 
-The First Amendment to the C++ standard states: _"The committee shall make no
-rules that prevents C++ programmers from shooting themselves in the foot."
-Also, the committee will keep adding more and more things to the language to
-make it more error-prone. That's just how things work at the C++ committee.
+The First Amendment to the C++ standard states: _"The committee shall make no rules that prevents 
+C++ programmers from shooting themselves in the foot. If anything, the language should encourage it."_
+Consequently, the C++ committee keeps adding more and more things to the language to
+make it more error-prone and confusing. That's just how things work at the C++ committee.
+Remember, if you use C++ language, then you have signed up for this craziness.
 This blog series will talk about some of the gotchas and pitfalls of the
-language. Let's explore how absurd (and crazy) C++ is.
+language. Let's explore how absurd (and crazy) C++ can be.
 
-## Default arguments of virtual functions
+# Default arguments of virtual functions
 
 C++, like most object oriented languages, supports virtual functions. Virtual
 functions provides support for runtime polymorphism. Internally, virtual
@@ -49,9 +53,15 @@ int main() {
 Should the output be `Hello World!` or should it be `Hello Earth!`?
 
 <details>
+
 <summary> Click this to see the output and explanation</summary>
+
+<code>
 Hello World!
---------------
+</code>
+
+<br>
+<br>
 
 But why? Default arguments is a compile-time phenomenon. Compiler inserts them
 in the function call at compile-time. On the other hand, virtual functions
@@ -59,8 +69,8 @@ is (of course) runtime phenomenon. Therefore, compiler takes the default argumen
 from the compile-time function.
 </details>
 
-## Static order initialization fiasco
+# Static order initialization fiasco
 
-## Should you move return values?
+# Should you move return values?
 
-## remove-erase idiom with an iterator
+# erase-remove idiom with an iterator
