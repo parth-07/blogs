@@ -22,7 +22,7 @@ Object files cannot have multiple identically named non-local symbols. A toolcha
 
 For each group of symbols with the same name, symbol resolution selects one of these symbols using well-defined rules. The selected symbol is part of the output image symbol table and is used to resolve symbol references to that name. 
 
-![Which var should satisfy undefined var reference?](/images/UndefSymRefMultipleDefs.png){: width="300" style='border:2px solid #000000'}
+![Which var should satisfy undefined var reference?](/assets/images/UndefSymRefMultipleDefs.png){: width="300" style='border:2px solid #000000'}
 
 <!---
 Add link to 'symbol resolution - shared object files' here once it is ready.
@@ -147,7 +147,7 @@ Add example of common symbol here.
 
 The precedence among *strong*, *common* and *weak* is:
 
-![strong vs common vs weak](/images/StrongVsCommonVsWeak.png){: width="350" style='border:2px solid #000000'}
+![strong vs common vs weak](/assets/images/StrongVsCommonVsWeak.png){: width="350" style='border:2px solid #000000'}
 
 A *strong* symbol can silently override *weak* and *common* symbols when they all have the same name. And a *common* symbol can silently override an identically named *weak* symbol.
 
@@ -394,7 +394,7 @@ Linker script symbols are symbols defined in a linker script, or passed to linke
 
 Linker script symbols have higher precedence than ordinary *global* symbols (Of course, a *linker* favors *linker script symbols*). A Linker scripts symbol can silently overrride an identically named object file *global* symbol.
 
-![abs vs strong vs common vs weak](/images/AbsVsStrongVsCommonVsWeak.png){: width="450" style='border:2px solid #000000'}
+![abs vs strong vs common vs weak](/assets/images/AbsVsStrongVsCommonVsWeak.png){: width="450" style='border:2px solid #000000'}
 
 Let's see an example:
 
