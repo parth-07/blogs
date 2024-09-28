@@ -3,14 +3,12 @@ layout: post
 title: "Linker Primer: Symbol Resolution - non-shared object files and linker scripts"
 ---
 
-Linker enables separate compilation, that is, separating the code into modules instead of having everything together in one module. One of the key linker functionality required for separate compilation is connecting undefined symbol references to symbol definitions. Symbol resolution, along with relocations, enables this functionality. This post describes symbol resolution and begins to unfold its behaviour.
+Linker enables separate compilation, that is, separating the code into modules instead of having everything together in one module. One of the key linker functionality required for separate compilation is connecting symbol references to symbol definitions. Symbol resolution, along with relocations, enables this functionality. This post describes symbol resolution and begins to unfold its behaviour.
 
 Symbol resolution is too big of a topic to cover all at once. This post will cover symbol resolution behavior for symbols from non-shared object files and linker scripts. Later posts will cover symbol resolution behavior that affect symbols from archive files, bitcode files, and shared objects. So, let's start without further ado.
 
-Symbol resolution does two things:
-
-- Selects symbols. Selected symbols form the output image symbol table and satisfy undefined symbol references.
-- Transforms the selected symbols. 
+We will start by discussing the need for symbol resolution. We will follow it up with what symbol resolution is, and then we will explore the symbol
+resolution rules for non-shared object files and linker scripts. That's the plan for this post.
 
 <!---
 Add a graph here that describes where symbol resolution typically fits in the linking process.
@@ -18,9 +16,9 @@ Add a graph here that describes where symbol resolution typically fits in the li
 
 ## Why do we need symbol resolution?
 
-Object files cannot have multiple identically named non-local symbols. A toolchain linker combines multiple input object files into one single output object file. What would happen if multiple input object files contain identically named non-local symbols? Which of the identically named symbols should be used to resolve symbolic references to that name? Which symbols should be included in the symbol table? For all such things, symbol resolution comes to the rescue. 
+Object files cannot have multiple identically named non-local symbols. A toolchain linker combines multiple input object files into one single output object file. What would happen if multiple input object files contain identically named non-local symbols? Which of the identically named symbols should be used to resolve symbolic references to that name? Which symbols should be included in the symbol table? For all such things, symbol resolution comes to the rescue.
 
-For each group of symbols with the same name, symbol resolution selects one of these symbols using well-defined rules. The selected symbol is part of the output image symbol table and is used to resolve symbol references to that name. 
+For each group of non-local symbols with the same name, symbol resolution selects one of these symbols using well-defined rules. The selected symbol is part of the output image symbol table and is used to resolve symbol references to that name.
 
 ![Which var should satisfy undefined var reference?]({{ site.baseurl }}/assets/images/UndefSymRefMultipleDefs.png){: width="300" style='border:2px solid #000000'}
 
@@ -28,6 +26,27 @@ For each group of symbols with the same name, symbol resolution selects one of t
 Add link to 'symbol resolution - shared object files' here once it is ready.
 --->
 All the selected symbols are included in the symbol table. When creating a dynamic executable or a shared library, the selected symbols satisfying certain criteria are also included in the dynamic symbol table. We will talk more about dynamic symbol table in a follow-up post.
+
+## Symbol Resolution
+
+Symbol resolution is the process of selecting symbols and transforming their properties as needed. The selected symbols form the output image
+symbol table and are used to resolve symbol references.
+
+Things are simple for local symbols, there are no surprises. Local symbols are always selected. Hence, in a translation unit,
+a local symbol reference is always resolved to the local symbol definition with the same name.
+
+<!---
+Add a diagram!!!
+--->
+
+Things are not-so-simple for non-local symbol. If you are not careful, then you might be surprised. A selected non-local symbol overrides other non-local
+symbols with the same name. Only one non-local symbol is selected with  A non-local symbol reference resolves to the selected non-local symbol definition with the same name. That means,
+if a translation unit `A` defines and refers symbol `foo`, then it is possible that the symbol reference `foo` in the translation unit `A` gets resolved to
+`foo` definition from an another translation unit.
+
+<!---
+Add a diagram!!!
+--->
 
 ## Symbol resolution rules
 
@@ -43,17 +62,34 @@ Remember that this post only focuses on rules for symbols from non-shared object
 
 ### Selection rules for symbols from non-shared object files and linker scripts
 
-Selection rules primarily depends on symbol binding and whether the symbol is defined, undefined, tentative or absolute. Symbol binding can have values: *global*, *weak*, and *local*. Some subtleties can make symbol resolution results seem surprising, but that's only if you forget a rule.
+Selection rules primarily depends on symbol binding and whether the symbol is
+defined, undefined, tentative or absolute. The complete list is much bigger.
+In some (complex) cases symbol resolution results may seem surprising, but remember,
+it will only happen if you forget a rule.
+
+Before we begin, I want to discuss defined and undefined symbols and introduce some terms that will help in our discussion
+
+I especially want to focus on defined symbols. The term 'defined symbol' encompasses various groups of symbols, which are treated slightly differently by
+symbol resolution. We will assign terms to these groups and use them in our discussion of symbol resolution for clarity.
+
+A defined symbol is a symbol that can be used to resolve symbol references. A local defined symbol can only resolve symbol references within its own translation unit, wheras a non-local defined symbol can resolve symbol references in any input.
+
+Symbols are typically defined relative to a section. With this, I mean that a symbol refers to a location within a section.
+However, this is not always the case.
+
+- `allocated-defined`
+- `common`
+- `absolute`
 
 List of rules that we are going to see:
 
-1. *local*
+1. *local* symbols
 1. *global* vs *common* vs *weak*
 1. *strong* vs *strong*
 1. *weak* vs *weak*
 1. *common* vs *common*
-1. *ABS*
-1. *group* sections
+1. *ABS* symbols
+1. *.gnu.linkonce.\** and *COMDAT* group
 
 #### 1) *local*
 
@@ -112,9 +148,9 @@ Note that, as expected, both `foo` symbols are retained in the symbol table.
 
 This rule determines which symbol to select when we have *global*, *common* and *weak* symbols of the same name in a link.
 
-Let's begin with some terminologies:
+Let's begin with some terminologies and core concepts:
 
-- *global* symbols are symbols with *global* symbol binding. A *global* symbol is visible across translation units. It can satisify an undefined 
+- *global* symbols are symbols with *global* symbol binding. A *global* symbol is visible across translation units. It can satisify an undefined
   symbol reference in other translation units. A *global* symbol example in `C`:
 
   ```cpp
@@ -124,7 +160,7 @@ Let's begin with some terminologies:
 
 - *weak* symbols are symbols with *weak* symbol binding. A *weak* symbol is like a *global* symbol but has less precedence than a *global* symbol.
   A *weak* symbol example in `C`:
-  
+
   ```cpp
   __attribute__((weak))
   int foo = 5;
@@ -142,7 +178,7 @@ Let's begin with some terminologies:
 Add example of common symbol here.
 --->
 
-- We will use the term *strong* symbol for *global* symbols that are defined in an input section. In simpler words, *global* symbols that are not
+- We will use the term *strong* symbol for *global* symbols that are allocated and defined. In simpler words, *global* symbols that are not
   *common* symbols are *strong* symbols.
 
 The precedence among *strong*, *common* and *weak* is:
@@ -390,7 +426,7 @@ foo                 0x10              fileC.o
 
 #### 5) Linker script symbols
 
-Linker script symbols are symbols defined in a linker script, or passed to linker using options such as `--defsym`. A linker script is used to specify the memory layout of the output image. They are important in the embedded development world where a finer control over the memory layout of programs is necessary. If you have any luck, then you will probably never hear about linker scripts ever again. 
+Linker script symbols are symbols defined in a linker script, or passed to linker using options such as `--defsym`. A linker script is used to specify the memory layout of the output image. They are important in the embedded development world where a finer control over the memory layout of programs is necessary. If you have any luck, then you will probably never hear about linker scripts ever again.
 
 Linker script symbols have higher precedence than ordinary *global* symbols (Of course, a *linker* favors *linker script symbols*). A Linker scripts symbol can silently overrride an identically named object file *global* symbol.
 
@@ -436,7 +472,7 @@ Let's see the output:
 
 Symbol table '.symtab' contains 5 entries:
    Num:    Value          Size Type    Bind   Vis       Ndx Name
-     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT   UND 
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT   UND
      1: 0000000000000000     0 FILE    LOCAL  DEFAULT   ABS 1.c
      2: 0000000000000013    11 FUNC    GLOBAL DEFAULT     1 baz
      3: 0000000000000000    11 FUNC    GLOBAL DEFAULT     1 foo
@@ -447,7 +483,25 @@ In the output, we can see that both `bar` and `baz` have values as specified in 
 linker selected `bar` and `baz` from the linker script.
 
 
-#### 6) Group sections
+#### 6) *.gnu.linkonce.\** and *COMDAT* group
+
+*.gnu.linkonce.\** and *COMDAT* group are features designed to remove code duplication. Many C++ features such as templates
+and inline functions results in the same fragments of code in multiple translation units. For example, if a template
+`template <typename T> T foo(T t)` is instantiated in multiple translation units for `T = int`, then all of these translation
+units have duplicate code for the function `template <> int foo(int t)`. There are two problems with this:
+
+- We cannot have multiple defined global symbols of the same name because that causes `multiple definition error`.
+- The final object file generated by the linker will have code duplication
+  because the linker merges input section contents to form output sections.
+
+
+
+##### **.gnu.linkonce.\***
+
+As the name suggests, it is a GNU extension. LLD does not support *.gnu.linkonce.\** functionality.
+
+##### *COMDAT* group
+
 
 ### Transformation rules for symbols from non-shared object files and linker scripts
 
