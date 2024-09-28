@@ -22,6 +22,14 @@ For each group of non-local symbols with the same name, symbol resolution select
 
 ![Which var should satisfy undefined var reference?]({{ site.baseurl }}/assets/images/UndefSymRefMultipleDefs.png){: width="300" style='border:2px solid #000000'}
 
+It seems that most, if not all, of the complexity in symbol resolution is due to the same-named non-local symbols in multiple inputs.
+So, why cannot we simply error-out if there are multiple non-local input symbols? We cannot because it is a crucial feature that enables
+many use-cases. For example, `C` standard library contains memory-family functions such as `malloc`, however, a general memory allocation
+algorithm does not fit all use-cases. It is critical for some use-cases to use a carefully-designed memory allocation algorithm. For such
+use-cases, it is crucial to override the default memory-family functions, such as `malloc`, with the corresponding custom ones. Please note
+that both the default `malloc` and the user-provided `malloc` must be non-local symbols. The linker needs to select the appropriate symbol and use it to resolve `malloc` references everywhere. Symbol resolution step is responsible for selecting the appropriate symbol when there are multiple
+identically named non-local symbols.
+
 <!---
 Add link to 'symbol resolution - shared object files' here once it is ready.
 --->
@@ -63,32 +71,74 @@ Remember that this post only focuses on rules for symbols from non-shared object
 ### Selection rules for symbols from non-shared object files and linker scripts
 
 Selection rules primarily depends on symbol binding and whether the symbol is
-defined, undefined, tentative or absolute. The complete list is much bigger.
+defined, undefined, tentative or absolute. The complete list is much bigger as we will soon see.
 In some (complex) cases symbol resolution results may seem surprising, but remember,
 it will only happen if you forget a rule.
 
-Before we begin, I want to discuss defined and undefined symbols and introduce some terms that will help in our discussion
+Before we begin, I want to discuss defined and undefined symbols and introduce some terms to help in our discussion
 
-I especially want to focus on defined symbols. The term 'defined symbol' encompasses various groups of symbols, which are treated slightly differently by
-symbol resolution. We will assign terms to these groups and use them in our discussion of symbol resolution for clarity.
+The term 'defined symbol' encompasses different kinds of symbols, which are treated slightly differently by the symbol resolution. We will assign terms to these different kinds of symbols and use them throughout the discussion where we need to be more precise than 'defined symbol'.
 
-A defined symbol is a symbol that can be used to resolve symbol references. A local defined symbol can only resolve symbol references within its own translation unit, wheras a non-local defined symbol can resolve symbol references in any input.
+A defined symbol is a symbol that can be used to resolve symbol references. A local defined symbol can only resolve symbol references within its own translation unit, whereas a non-local defined symbol can resolve symbol references in any input. An undefined symbol is a symbol that is not a defined symbol. It cannot be used to resolve symbol references.
 
-Symbols are typically defined relative to a section. With this, I mean that a symbol refers to a location within a section.
-However, this is not always the case.
+All defined symbols except absolute symbols point to a storage location.
 
-- `allocated-defined`
-- `common`
-- `absolute`
+There are 3 kinds of defined symbols:
+
+- **section-relative defined symbols** are defined relative to a section. In other words, this means
+  that the symbol points to a location within a section. This is by far the most common kind of symbol that you will see.
+
+- **common symbols** are ~~spawn of the devil~~ relics from the old days of computing. 
+  *common* symbols are called tentative symbols because, unlike other defined symbols, they are tentatively defined.
+  Yes, this means they might not get actually defined after all. 
+  
+  Common symbols are similar to section-relative symbols in that the symbol points to a storage location.
+  However, unlike the section-relative defined symbols, the compiler cannot assign storage for
+  common symbols because their size is unknown until link time. The common symbol size is unknown
+  until link time because of the core behaviour of common symbols: If there are multiple identically
+  named common symbols, they should all point to a common block of storage that is big enough to
+  satisfy the largest member. Of course, the linker is the one that allocates storage for common symbols.
+  After all, only the linker knows about all the common symbols defined in the project, and hence, only
+  the linker can determine how much memory to allocate for common symbols.
+  
+  If there are both *common* and non-common symbols with the same name and the symbol resolution selects one of
+  the non-common symbols, then the linker does not allocate any storage for the common symbols with
+  that name. This is like the *common* symbols with that name were never defined in the first place.
+
+
+  <!---
+  Note how it differs from section-relative defined symbols. The compiler assigns unique storage to
+  each section-relative defined symbol.
+
+
+  From the symbol resolution perspective, the linker selects the largest common symbol from the
+  multiple identically named common symbols and uses it to resolve symbol references.
+  Additionally, the linker allocates storage for the selected common symbol. No storage is
+  allocated for non-selected common symbols.
+
+  Their size is not known until link time because multiple identically named *common* symbols are allowed and linker has to keep only one of them. This is different from typical symbol resolution that involves non-common symbols, where linker selects one of the symbol but all the other symbols are still present in the output image -- they are just not used for resolving symbol references and are not present in the symbol table.
+
+  A *common* symbol is only allocated a storage if the symbol resolution selects the *common* symbol. That means, if a common symbol is not selected
+  by the symbol resolution, then common symbol does not exist in the output image. 
+  
+  *common* symbols section index field holds `SHN_COMMON`. It is a placeholder section index and the section
+  does not actually exist. The linker creates an output section for selected *common* symbols and place them into it.
+  
+  --->
+
+- **absolute symbols** are not defined relative to any section. Their value is absolute
+  and is used as it is. The *absolute* symbols section index field holds `SHN_ABS`.
+
+We will discuss other concepts as we explore the rules :).
 
 List of rules that we are going to see:
 
 1. *local* symbols
-1. *global* vs *common* vs *weak*
+1. Symbol binding: *global* vs *common* vs *weak*
+1. *ABS* symbols
 1. *strong* vs *strong*
 1. *weak* vs *weak*
 1. *common* vs *common*
-1. *ABS* symbols
 1. *.gnu.linkonce.\** and *COMDAT* group
 
 #### 1) *local*
@@ -144,7 +194,7 @@ ld.bfd: warning: cannot find entry symbol _start; defaulting to 0000000000401000
 
 Note that, as expected, both `foo` symbols are retained in the symbol table.
 
-#### 2) *global* vs *common* vs *weak*
+#### 2) Symbol binding: *global* vs *common* vs *weak*
 
 This rule determines which symbol to select when we have *global*, *common* and *weak* symbols of the same name in a link.
 
@@ -490,7 +540,7 @@ and inline functions results in the same fragments of code in multiple translati
 `template <typename T> T foo(T t)` is instantiated in multiple translation units for `T = int`, then all of these translation
 units have duplicate code for the function `template <> int foo(int t)`. There are two problems with this:
 
-- We cannot have multiple defined global symbols of the same name because that causes `multiple definition error`.
+- Multiple identically named global *allocated-defined* symbols causes `multiple definition error`.
 - The final object file generated by the linker will have code duplication
   because the linker merges input section contents to form output sections.
 
@@ -498,7 +548,7 @@ units have duplicate code for the function `template <> int foo(int t)`. There a
 
 ##### **.gnu.linkonce.\***
 
-As the name suggests, it is a GNU extension. LLD does not support *.gnu.linkonce.\** functionality.
+**As the name suggests, it is a GNU extension. LLD does not support *.gnu.linkonce.\** functionality.**
 
 ##### *COMDAT* group
 
