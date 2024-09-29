@@ -73,7 +73,7 @@ The *Selection Rules* and *Transformation Rules* terms are crafted by me and are
 
 Remember that this post only focuses on rules for symbols from non-shared objects and linker scripts. Later posts will cover the other symbol resolution rules.
 
-### Selection rules for symbols from non-shared object files and linker scripts
+## Selection rules for symbols from non-shared object files and linker scripts
 
 Selection rules primarily depends on symbol binding and whether the symbol is
 defined, undefined, tentative or absolute. The complete list is much bigger as we will soon see.
@@ -103,13 +103,13 @@ There are 3 kinds of defined symbols:
 
 - **common symbols** are ~~spawn of the devil~~ relics from the old days of computing.
 
-  *common* symbols do not have a value and do not have any section backing them. 
+  *common* symbols do not have a value and do not have any section backing them.
   *common* symbols section index field holds `SHN_COMMON`. It is a placeholder section index,
   the section does not actually exist.
 
   *common* symbols are called tentative symbols because, unlike other defined symbols, they are tentatively defined.
   Yes, this means they might not get actually defined after all.
-  
+
   *common* symbols are similar to section-relative symbols in that the symbol is supposed to point to a storage location.
   However, unlike the section-relative defined symbols, the compiler cannot assign storage for
   common symbols because their size is unknown until link time. The common symbol size is unknown
@@ -158,7 +158,7 @@ List of rules that we are going to see:
 1. *common* vs *common*
 1. *.gnu.linkonce.\** and *COMDAT* group
 
-#### 1) *local*
+### 1) *local*
 
 *local* symbols are the symbols with *local* symbol binding. A *local* symbol is only visible in the translation unit in which it is defined.
 It cannot be used to satisfy symbol references in an another translation unit. A local symbol example in `C`:
@@ -211,7 +211,7 @@ ld.bfd: warning: cannot find entry symbol _start; defaulting to 0000000000401000
 
 Note that, as expected, both `foo` symbols are present in the symbol table.
 
-#### 2) Symbol binding: *global* vs *common* vs *weak*
+### 2) Symbol binding: *global* vs *common* vs *weak*
 
 This rule determines which symbol to select when we have identically named *global*, *common* and *weak* symbols.
 
@@ -325,12 +325,12 @@ A *common* symbol silently overrides *weak* symbols.
 Add an example here!
 --->
 
-#### 3) ABS symbols
+### 3) ABS symbols
 
-Linker scripts symbols are absolute symbols. Linker script symbols are symbols defined in a linker script, 
+Linker scripts symbols are absolute symbols. Linker script symbols are symbols defined in a linker script,
 or passed to linker using options such as `--defsym`. A linker script is used to specify the memory layout
-of the output image. They are important in the embedded development world where a finer control over the 
-memory layout of programs is necessary. If you have any luck, then you will probably never hear about 
+of the output image. They are important in the embedded development world where a finer control over the
+memory layout of programs is necessary. If you have any luck, then you will probably never hear about
 linker scripts ever again.
 
 Linker script symbols have higher precedence than ordinary *global* symbols (Of course, a *linker* favors *linker script symbols*).
@@ -388,7 +388,7 @@ Symbol table '.symtab' contains 5 entries:
 In the output, we can see that both `bar` and `baz` have values as specified in the linker script `script.t`. From this, we can determine that
 linker selected `bar` and `baz` from the linker script.
 
-#### 4) *strong* vs *strong*
+### 4) *strong* vs *strong*
 
 It is an error to have multiple identically named *strong* symbols in a link. :).
 
@@ -427,7 +427,7 @@ We get the following output on running the above script:
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ```
 
-#### 5) *weak* vs *weak*
+### 5) *weak* vs *weak*
 
 If there are multiple identically named *weak* symbols, then the linker selects the first one as per the order in which the linker reads symbols.
 
@@ -510,7 +510,7 @@ foo: 3
 foo: 0
 ```
 
-#### 4) *common* vs *common*
+### 4) *common* vs *common*
 
 If there are multiple identically named *common* symbols, then the linker selects the common symbol with the maximum size.
 Linker only allocates storage for the *selected* *common* symbols. So, if there 3 identically named *common* symbols with sizes:
@@ -565,35 +565,132 @@ foo                 0x10              fileC.o
 ```
 
 
-#### 6) *.gnu.linkonce.\** and *COMDAT* group
+### 6) *.gnu.linkonce.\** and *COMDAT* group
 
 *.gnu.linkonce.\** and *COMDAT* group are features designed to remove code duplication. Many C++ features such as templates
 and inline functions results in the same fragments of code in multiple translation units. For example, if a template
 `template <typename T> T foo(T t)` is instantiated in multiple translation units for `T = int`, then all of these translation
 units have duplicate code for the function `template <> int foo(int t)`. There are two problems with this:
 
-- Multiple identically named global *section-relative* symbols cause `multiple definition error`.
+- Multiple identically named *global* *section-relative* symbols cause `multiple definition error`.
 - The final object file generated by the linker will have code duplication
   because the linker merges input section contents to form output sections.
 
+The first issue can be resolved by making the symbols *weak*. Multiple identically named *weak* symbols do not cause
+`multiple definition error`. Linker picks the first definition it sees. All seems good. However, this does nothing for
+the code duplication in the output object file. Non-selected symbols are still present in the output image -- they are just
+not part of the symbol table and are not used for resolving symbol references. `*.gnu.linkonce.\** and *COMDAT* group features
+fixes both the issue. Let's see what they are all about.
 
 
-##### **.gnu.linkonce.\***
+#### *.gnu.linkonce.\**
 
 **As the name suggests, it is a GNU extension. LLD does not support *.gnu.linkonce.\** functionality.**
 
-##### *COMDAT* group
+*.gnu.linkonce.\** feature instructs the linker that only one of the sections having the name *.gnu.linkonce.<SomeName>*
+should be included in the output image and the remaining sections should be discarded. When the link contains multiple sections have
+the name *.gnu.linkonce.<SomeName>*, then the linker keeps the first one it sees and discards the rest. For example:
 
+```
+#!/usr/bin/env bash
 
-### Transformation rules for symbols from non-shared object files and linker scripts
+cat >1.c <<\EOF
+__attribute__((section(".gnu.linkonce.foo")))
+int foo() { return 11; }
+EOF
 
-#### Symbol visiblility
+cat >2.c <<\EOF
+__attribute__((section(".gnu.linkonce.foo")))
+int foo() { return 1; }
+EOF
 
-Symbol visibility does not affect at all which symbol is selected by the linker. However, if a symbol with non-default symbol visibility is selected, then the linker transforms the symbol's properties according to its symbol visibility.
+cat >main.c <<\EOF
+int foo();
+int baz();
+int main() {
+  return foo();
+}
+EOF
 
-<!---
-Add an example here!
---->
+clang -o 1.o 1.c -c
+clang -o 2.o 2.c -c
+clang -o main.o main.c -c
+clang -o main.2.out main.o 1.o 2.o
+./main.1.out
+clang -o main.2.out main.o 2.o 1.o
+./main.2.out
+```
 
-#### Summary
+Executing `./main.1.out` prints `11` and executing `main.2.out` prints `1`. This makes sense because
+the linker keeps the first section it sees with the name `.gnu.linkonce.foo`. The linker first sees
+`1.o(.gnu.linkonce.foo)` when generating `main.1.out`. On the other hand, the linker first sees
+`2.o(.gnu.linkonce.foo)` when generating `main.2.out`.
+
+#### *COMDAT* group
+
+*COMDAT* group is an improvement over the `.gnu.linkonce.*` feature. *COMDAT* group is one of the functionality
+of the group section feature. A *COMDAT* group section has one or more members, where members are simply sections of the
+object file containing the *COMDAT* group section. If multiple *COMDAT* groups have the same signature symbol, then
+linker keeps members from one of the group and discards the members from the remaining groups. Group section feature
+and *COMDAT* group will be discussed in detail in a later post.
+
+A *COMDAT* group example:
+
+```
+#!/usr/bin/env bash
+
+cat >foo.h <<\EOF
+template<typename T>
+T foo(T u) { return u; }
+EOF
+
+cat >1.cpp <<\EOF
+#include "foo.h"
+
+int bar() { return foo(1); }
+EOF
+
+cat >2.cpp <<\EOF
+#include "foo.h"
+
+int baz() { return foo(3); }
+EOF
+
+cat >main.cpp <<\EOF
+int bar();
+int baz();
+
+int foo(int u) { return 17; }
+
+int main() { return bar() + baz(); }
+EOF
+
+clang++ -o 1.o 1.cpp -c
+clang++ -o 2.o 2.cpp -c
+clang++ -o main.o main.cpp -c
+clang++ -o main.out main.o 1.o 2.o -stdlib=libc++
+```
+
+`llvm-readelf -S 1.o` prints:
+
+```
+There are 12 section headers, starting at offset 0x2a0:
+
+Section Headers:
+  [Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al
+  [ 0]                   NULL            0000000000000000 000000 000000 00      0   0  0
+  [ 1] .strtab           STRTAB          0000000000000000 000221 00007c 00      0   0  1
+  [ 2] .text             PROGBITS        0000000000000000 000040 000010 00  AX  0   0 16
+  [ 3] .rela.text        RELA            0000000000000000 0001d8 000018 18   I 11   2  8
+  [ 4] .group            GROUP           0000000000000000 000140 000008 04     11   5  4
+  [ 5] .text._Z3fooIiET_S0_ PROGBITS     0000000000000000 000050 00000c 00 AXG  0   0 16
+```
+
+`G` flag in `.text._Z3fooIiET_S0_` row indicates that this section is a group member. Similarly, `.text._Z3fooIiET_S0_`
+section in `2.o` is also a group member. The groups in `1.o` and `2.o` have the same signature, that is, the section name `.text._Z3fooIiET_S0_`.
+The linker discards members from one of the groups because the groups have the same signature, and thus removes the code duplication.
+
+### Summary
+
+<TODO>
 
