@@ -701,5 +701,5 @@ The linker discards members from one of the groups because the groups have the s
    Linker sequentially reads symbols from input files in the input-order specified in the link command-line.
 1. *common* vs *common*: Symbol with the maximum size is selected.
 1. *.gnu.linkonce.\** and *COMDAT* group: Removes code-duplication by discarding sections
-   and thus obviates `multiple definition` error.
+   and obviates `multiple definition` error.
 
