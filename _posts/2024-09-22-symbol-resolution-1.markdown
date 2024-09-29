@@ -510,7 +510,7 @@ foo: 3
 foo: 0
 ```
 
-### 4) *common* vs *common*
+### 6) *common* vs *common*
 
 If there are multiple identically named *common* symbols, then the linker selects the common symbol with the maximum size.
 Linker only allocates storage for the *selected* *common* symbols. So, if there 3 identically named *common* symbols with sizes:
@@ -565,7 +565,7 @@ foo                 0x10              fileC.o
 ```
 
 
-### 6) *.gnu.linkonce.\** and *COMDAT* group
+### 7) *.gnu.linkonce.\** and *COMDAT* group
 
 *.gnu.linkonce.\** and *COMDAT* group are features designed to remove code duplication. Many C++ features such as templates
 and inline functions results in the same fragments of code in multiple translation units. For example, if a template
