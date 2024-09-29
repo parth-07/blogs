@@ -5,6 +5,9 @@ title: "Linker Primer: Symbol Resolution - non-shared object files and linker sc
 
 Linker enables separate compilation, that is, separating the code into modules instead of having everything together in one module. One of the key linker functionality required for separate compilation is connecting symbol references to symbol definitions. Symbol resolution, along with relocations, enables this functionality. This post describes symbol resolution and begins to unfold its behaviour.
 
+This post describes symbol resolution for ELF linkers on Unix platforms. It does not aim to cover linking concepts for
+linkers on other platforms or object file formats. This being said, most concepts discussed here are common for all linkers.
+
 Symbol resolution is too big of a topic to cover all at once. This post will cover symbol resolution behavior for symbols from non-shared object files and linker scripts. Later posts will cover symbol resolution behavior that affect symbols from archive files, bitcode files, and shared objects. So, let's start without further ado.
 
 We will start by discussing the need for symbol resolution. We will follow it up with what symbol resolution is, and then we will explore the symbol
@@ -33,7 +36,7 @@ identically named non-local symbols.
 <!---
 Add link to 'symbol resolution - shared object files' here once it is ready.
 --->
-All the selected symbols are included in the symbol table. When creating a dynamic executable or a shared library, the selected symbols satisfying certain criteria are also included in the dynamic symbol table. We will talk more about dynamic symbol table in a follow-up post.
+All the selected symbols are included in the symbol table. When creating a dynamic executable or a shared library, the selected symbols satisfying certain criteria are also included in the dynamic symbol table. We will talk more about dynamic linking and dynamic symbol table in a follow-up post.
 
 ## Symbol Resolution
 
@@ -48,7 +51,7 @@ Add a diagram!!!
 --->
 
 Things are not-so-simple for non-local symbol. If you are not careful, then you might be surprised. A selected non-local symbol overrides other non-local
-symbols with the same name. Only one non-local symbol is selected with  A non-local symbol reference resolves to the selected non-local symbol definition with the same name. That means,
+symbols with the same name. A non-local symbol reference resolves to the selected non-local symbol definition with the same name. That means,
 if a translation unit `A` defines and refers symbol `foo`, then it is possible that the symbol reference `foo` in the translation unit `A` gets resolved to
 `foo` definition from an another translation unit.
 
@@ -58,13 +61,15 @@ Add a diagram!!!
 
 ## Symbol resolution rules
 
-Symbol resolution rules are simple, yet the results can sometimes be surprising. Let's explore these rules so they do not surprise us. We will use examples as much as possible because I believe hands-on is the best way to learn computer science and appreciate the nitty-gritty details.
+Symbol resolution rules are simple, yet the results can be surprising at times. Let's explore these rules so they do not catch us by surprise. We will use examples as much as possible because I believe hands-on is the best way to learn computer science and appreciate the nitty-gritty details.
 
 The symbol resolution rules are of two distinct themes:
 
 - Rules which determine which input symbol to select when there are multiple identically named input symbols. We will call these rules as
   *Selection Rules*.
 - Rules that describes transformation of properties of a selected symbol. We will call these rules as *Transformation Rules*.
+
+The *Selection Rules* and *Transformation Rules* terms are crafted by me and are not official/famous by any means.
 
 Remember that this post only focuses on rules for symbols from non-shared objects and linker scripts. Later posts will cover the other symbol resolution rules.
 
@@ -87,24 +92,41 @@ There are 3 kinds of defined symbols:
 
 - **section-relative defined symbols** are defined relative to a section. In other words, this means
   that the symbol points to a location within a section. This is by far the most common kind of symbol that you will see.
+  For example:
 
-- **common symbols** are ~~spawn of the devil~~ relics from the old days of computing. 
+  ```cpp
+  int foo() { return 1; } // foo is a section-relative defined symbol
+  int bar = 11; // bar is a section-relative defined symbol
+  ```
+
+- **common symbols** are ~~spawn of the devil~~ relics from the old days of computing.
+
+  *common* symbols do not have a value and do not have any section backing them. 
+  *common* symbols section index field holds `SHN_COMMON`. It is a placeholder section index,
+  the section does not actually exist.
+
   *common* symbols are called tentative symbols because, unlike other defined symbols, they are tentatively defined.
-  Yes, this means they might not get actually defined after all. 
+  Yes, this means they might not get actually defined after all.
   
-  Common symbols are similar to section-relative symbols in that the symbol points to a storage location.
+  *common* symbols are similar to section-relative symbols in that the symbol is supposed to point to a storage location.
   However, unlike the section-relative defined symbols, the compiler cannot assign storage for
   common symbols because their size is unknown until link time. The common symbol size is unknown
-  until link time because of the core behaviour of common symbols: If there are multiple identically
+  until link time because of the core behaviour of common symbols: **If there are multiple identically
   named common symbols, they should all point to a common block of storage that is big enough to
-  satisfy the largest member. Of course, the linker is the one that allocates storage for common symbols.
-  After all, only the linker knows about all the common symbols defined in the project, and hence, only
+  satisfy the largest member**. Of course, the linker is the one that allocates storage for common symbols.
+  After all, only the linker knows about all the common symbols defined in a project, and hence, only
   the linker can determine how much memory to allocate for common symbols.
-  
+
   If there are both *common* and non-common symbols with the same name and the symbol resolution selects one of
   the non-common symbols, then the linker does not allocate any storage for the common symbols with
-  that name. This is like the *common* symbols with that name were never defined in the first place.
+  that name. This is akin to the *common* symbols with that name not being defined at all, as they
+  never got any storage assigned to them. There is no trace of them in the output object file.
 
+  *common* symbols are evil and they are disabled by default in both gcc and clang. Uninitialized global
+  variables become *common* symbols when the source file is compiled with `-fcommon` option. *common* symbols
+  should be avoided wherever possible.
+
+  We will discuss more on symbol resolution for common symbols soon as we explore the symbol resolution rules.
 
   <!---
   Note how it differs from section-relative defined symbols. The compiler assigns unique storage to
@@ -117,17 +139,10 @@ There are 3 kinds of defined symbols:
   allocated for non-selected common symbols.
 
   Their size is not known until link time because multiple identically named *common* symbols are allowed and linker has to keep only one of them. This is different from typical symbol resolution that involves non-common symbols, where linker selects one of the symbol but all the other symbols are still present in the output image -- they are just not used for resolving symbol references and are not present in the symbol table.
-
-  A *common* symbol is only allocated a storage if the symbol resolution selects the *common* symbol. That means, if a common symbol is not selected
-  by the symbol resolution, then common symbol does not exist in the output image. 
-  
-  *common* symbols section index field holds `SHN_COMMON`. It is a placeholder section index and the section
-  does not actually exist. The linker creates an output section for selected *common* symbols and place them into it.
-  
   --->
 
 - **absolute symbols** are not defined relative to any section. Their value is absolute
-  and is used as it is. The *absolute* symbols section index field holds `SHN_ABS`.
+  and is used as it is.
 
 We will discuss other concepts as we explore the rules :).
 
@@ -144,14 +159,14 @@ List of rules that we are going to see:
 #### 1) *local*
 
 *local* symbols are the symbols with *local* symbol binding. A *local* symbol is only visible in the translation unit in which it is defined.
-It cannot be used to satisfy undefined symbol references in an another translation unit. A local symbol example in `C`:
+It cannot be used to satisfy symbol references in an another translation unit. A local symbol example in `C`:
 
 ```cpp
 static int foo = 1;
 ```
 
 By default all *local* symbols are preserved (selected) by the symbol resolution. If multiple input files
-contains identically named local symbol, then each symbol is preserved in the output object file. Multiple identically named *local* symbols are
+contains identically named local symbols, then each symbol is preserved in the output object file. Multiple identically named *local* symbols are
 allowed in an object file.
 
 Example:
@@ -192,19 +207,23 @@ ld.bfd: warning: cannot find entry symbol _start; defaulting to 0000000000401000
      4: 0000000000403004     4 OBJECT  LOCAL  DEFAULT     3 foo
 ```
 
-Note that, as expected, both `foo` symbols are retained in the symbol table.
+Note that, as expected, both `foo` symbols are present in the symbol table.
 
 #### 2) Symbol binding: *global* vs *common* vs *weak*
 
-This rule determines which symbol to select when we have *global*, *common* and *weak* symbols of the same name in a link.
+This rule determines which symbol to select when we have identically named *global*, *common* and *weak* symbols.
 
 Let's begin with some terminologies and core concepts:
 
-- *global* symbols are symbols with *global* symbol binding. A *global* symbol is visible across translation units. It can satisify an undefined
-  symbol reference in other translation units. A *global* symbol example in `C`:
+- Symbol binding can take values *global*, *weak* and *local*. *global* and *weak* symbols are visible in all inputs whereas
+  *local* symbols are only visible within their translation unit.
+
+- *global* symbols are symbols with *global* symbol binding. A *global* symbol is visible across translation units. It can satisify
+  symbol references in other translation units. A *global* symbol example in `C`:
 
   ```cpp
-  int foo = 3;
+  int foo = 3; // a global variable
+  int bar() { return 1; } // a global function
   ```
 
 
@@ -213,22 +232,23 @@ Let's begin with some terminologies and core concepts:
 
   ```cpp
   __attribute__((weak))
-  int foo = 5;
+  int foo = 5;  // a weak variable
+
+  __attribute__((weak))
+  int bar() { return 7; } // a weak function
   ```
 
-- *common* symbols are ~~spawn of the devil~~ uninitialized *global* symbols that are not allocated . *COM* (COMMON) placeholder
-  is used for section index value of common symbols. They are placed in an output section by the linker. *common* symbols are also called tentative symbols. They are relic from the old days
-  of compiling and linking. Thankfully, common symbol functionality is disabled by default in modern toolchains. A common symbol example:
+- *common* symbols are evil. A *common* symbol always has *global* symbol binding, and thus all *common* symbols are *global* symbols.
+  *common* symbols are only assigned storage if the symbol resolution selects them. In contrast, other non-absolute defined symbols
+  always have storage and are part of the output image, irrespective of the symbol resolution result.
+
+  Thankfully, common symbol functionality is disabled by default in modern toolchains. A common symbol example:
 
   ```cpp
   int foo; // and compile the file with '-fcommon'
   ```
 
-<!---
-Add example of common symbol here.
---->
-
-- We will use the term *strong* symbol for *global* symbols that are allocated and defined. In simpler words, *global* symbols that are not
+- We will use the term *strong* symbol for *section-relative* *global* symbols. In simpler words, *global* symbols that are not
   *common* symbols are *strong* symbols.
 
 The precedence among *strong*, *common* and *weak* is:
@@ -303,7 +323,70 @@ A *common* symbol silently overrides *weak* symbols.
 Add an example here!
 --->
 
-#### 3) *strong* vs *strong*
+#### 3) ABS symbols
+
+Linker scripts symbols are absolute symbols. Linker script symbols are symbols defined in a linker script, 
+or passed to linker using options such as `--defsym`. A linker script is used to specify the memory layout
+of the output image. They are important in the embedded development world where a finer control over the 
+memory layout of programs is necessary. If you have any luck, then you will probably never hear about 
+linker scripts ever again.
+
+Linker script symbols have higher precedence than ordinary *global* symbols (Of course, a *linker* favors *linker script symbols*).
+A Linker scripts symbol can silently overrride an identically named non-absolute *global* symbol.
+
+![abs vs strong vs common vs weak]({{ site.baseurl }}/assets/images/AbsVsStrongVsCommonVsWeak.png){: width="450" style='border:2px solid #000000'}
+
+Let's see an example:
+
+```
+#!/usr/bin/env bash
+
+cat >1.c <<\EOF
+int foo() { return 1; }
+int baz() { return 15; }
+int bar() { return 17; }
+EOF
+
+cat >script.t <<\EOF
+bar = 0x11;
+
+SECTIONS {
+  .text : {
+    *(*text*)
+    baz = 0x13;
+  }
+}
+EOF
+
+clang -o 1.o 1.c -c -ffunction-sections
+ld.bfd -o 1.out 1.o -T script.t
+llvm-readelf -s 1.out
+```
+
+In the example above, the two symbols `baz` and `bar` are defined two times: object file `1.o` and linker script `script.t`.
+
+Let's see the output:
+
+```
++ cat
++ cat
++ clang -o 1.o 1.c -c -ffunction-sections
++ ld.bfd -o 1.out 1.o -T script.t
++ llvm-readelf -s 1.out
+
+Symbol table '.symtab' contains 5 entries:
+   Num:    Value          Size Type    Bind   Vis       Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT   UND
+     1: 0000000000000000     0 FILE    LOCAL  DEFAULT   ABS 1.c
+     2: 0000000000000013    11 FUNC    GLOBAL DEFAULT     1 baz
+     3: 0000000000000000    11 FUNC    GLOBAL DEFAULT     1 foo
+     4: 0000000000000011    11 FUNC    GLOBAL DEFAULT   ABS bar
+```
+
+In the output, we can see that both `bar` and `baz` have values as specified in the linker script `script.t`. From this, we can determine that
+linker selected `bar` and `baz` from the linker script.
+
+#### 4) *strong* vs *strong*
 
 It is an error to have multiple identically named *strong* symbols in a link. :).
 
@@ -342,9 +425,11 @@ We get the following output on running the above script:
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ```
 
-#### 3) *weak* vs *weak*
+#### 5) *weak* vs *weak*
 
-If there are multiple identically named *weak* symbols, then the linker selects the first one as per the order in which the linker reads symbols. It does not matter if a *weak* symbol has initializer or not. The below two *weak* symbols have equal precendence:
+If there are multiple identically named *weak* symbols, then the linker selects the first one as per the order in which the linker reads symbols.
+
+It does not matter if a *weak* symbol has aninitializer or not. The below two *weak* symbols have equal precendence:
 
 ```cpp
 __attribute__((weak))
@@ -426,6 +511,9 @@ foo: 0
 #### 4) *common* vs *common*
 
 If there are multiple identically named *common* symbols, then the linker selects the common symbol with the maximum size.
+Linker only allocates storage for the *selected* *common* symbols. So, if there 3 identically named *common* symbols with sizes:
+`2`, `4`, and `8`. Then linker selects the common symbol that has size `8` and allocates storage for it. The non-selected *common* symbols
+are not assigned a storage and are thus not contained in the output image.
 
 Example:
 
@@ -474,64 +562,6 @@ Common symbol       size              file
 foo                 0x10              fileC.o
 ```
 
-#### 5) Linker script symbols
-
-Linker script symbols are symbols defined in a linker script, or passed to linker using options such as `--defsym`. A linker script is used to specify the memory layout of the output image. They are important in the embedded development world where a finer control over the memory layout of programs is necessary. If you have any luck, then you will probably never hear about linker scripts ever again.
-
-Linker script symbols have higher precedence than ordinary *global* symbols (Of course, a *linker* favors *linker script symbols*). A Linker scripts symbol can silently overrride an identically named object file *global* symbol.
-
-![abs vs strong vs common vs weak]({{ site.baseurl }}/assets/images/AbsVsStrongVsCommonVsWeak.png){: width="450" style='border:2px solid #000000'}
-
-Let's see an example:
-
-```
-#!/usr/bin/env bash
-
-cat >1.c <<\EOF
-int foo() { return 1; }
-int baz() { return 15; }
-int bar() { return 17; }
-EOF
-
-cat >script.t <<\EOF
-bar = 0x11;
-
-SECTIONS {
-  .text : {
-    *(*text*)
-    baz = 0x13;
-  }
-}
-EOF
-
-clang -o 1.o 1.c -c -ffunction-sections
-ld.bfd -o 1.out 1.o -T script.t
-llvm-readelf -s 1.out
-```
-
-In the example above, the two symbols `baz` and `bar` are defined two times: object file `1.o` and linker script `script.t`.
-
-Let's see the output:
-
-```
-+ cat
-+ cat
-+ clang -o 1.o 1.c -c -ffunction-sections
-+ ld.bfd -o 1.out 1.o -T script.t
-+ llvm-readelf -s 1.out
-
-Symbol table '.symtab' contains 5 entries:
-   Num:    Value          Size Type    Bind   Vis       Ndx Name
-     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT   UND
-     1: 0000000000000000     0 FILE    LOCAL  DEFAULT   ABS 1.c
-     2: 0000000000000013    11 FUNC    GLOBAL DEFAULT     1 baz
-     3: 0000000000000000    11 FUNC    GLOBAL DEFAULT     1 foo
-     4: 0000000000000011    11 FUNC    GLOBAL DEFAULT   ABS bar
-```
-
-In the output, we can see that both `bar` and `baz` have values as specified in the linker script `script.t`. From this, we can determine that
-linker selected `bar` and `baz` from the linker script.
-
 
 #### 6) *.gnu.linkonce.\** and *COMDAT* group
 
@@ -540,7 +570,7 @@ and inline functions results in the same fragments of code in multiple translati
 `template <typename T> T foo(T t)` is instantiated in multiple translation units for `T = int`, then all of these translation
 units have duplicate code for the function `template <> int foo(int t)`. There are two problems with this:
 
-- Multiple identically named global *allocated-defined* symbols causes `multiple definition error`.
+- Multiple identically named global *section-relative* symbols cause `multiple definition error`.
 - The final object file generated by the linker will have code duplication
   because the linker merges input section contents to form output sections.
 
