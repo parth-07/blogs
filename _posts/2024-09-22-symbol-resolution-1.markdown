@@ -99,6 +99,8 @@ There are 3 kinds of defined symbols:
   int bar = 11; // bar is a section-relative defined symbol
   ```
 
+  This term is crafted by me and is not official/famous by any means.
+
 - **common symbols** are ~~spawn of the devil~~ relics from the old days of computing.
 
   *common* symbols do not have a value and do not have any section backing them. 
