@@ -582,6 +582,8 @@ the code duplication in the output object file. Non-selected symbols are still p
 not part of the symbol table and are not used for resolving symbol references. `*.gnu.linkonce.\** and *COMDAT* group features
 fixes both the issue. Let's see what they are all about.
 
+*.gnu.linkonce.\** and *COMDAT* group do not (directly) affect symbol resolution, however, these features can make symbol resolution
+results appear surprising. That's why we are discussing them in symbol resolution post.
 
 #### *.gnu.linkonce.\**
 
@@ -692,5 +694,12 @@ The linker discards members from one of the groups because the groups have the s
 
 ### Summary
 
-<TODO>
+1. *local* symbols are always selected by the symbol resolution.
+1. Symbol binding precedence: *global* > *weak*
+1. *global* binding precende: *absolute* > *section-relative* > *common*
+1. *weak* vs *weak*: Symbol resolution selects the first one read by the linker.
+   Linker sequentially reads symbols from input files in the input-order specified in the link command-line.
+1. *common* vs *common*: Symbol with the maximum size is selected.
+1. *.gnu.linkonce.\** and *COMDAT* group: Removes code-duplication by discarding sections
+   and thus obviates `multiple definition` error.
 
